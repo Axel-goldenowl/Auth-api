@@ -6,7 +6,7 @@ import { AppService } from './app.service';
 
 import { DatabaseModule } from '@/database/database.module';
 import { AuthModule } from '@/modules/auth/auth.module';
-// import { EmailModule } from './modules/email/email.module';
+
 @Module({
   imports: [
     ConfigModule.forRoot({

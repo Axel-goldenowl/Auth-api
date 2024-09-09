@@ -11,13 +11,13 @@ async function bootstrap() {
 
   const port = configService.get<number>('PORT') || 3000;
   app.enableCors({
-    origin: 'http://localhost:5173',
+    origin: configService.get<string>('CLIENT_URL'),
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     allowedHeaders: 'Content-Type, Accept',
     credentials: true,
   });
   app.use(cookieParser());
-  app.setGlobalPrefix('api/v1');
+  app.setGlobalPrefix('api');
   await app.listen(port);
 }
 bootstrap();
