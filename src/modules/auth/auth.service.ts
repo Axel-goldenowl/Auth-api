@@ -18,6 +18,7 @@ import {
 
 import { User } from '@/modules/users/entities/user.entity';
 import { UserDto } from '@/modules/users/dto/create-user.dto';
+import { verifyOtpDTO } from './dto/verity-otp.dto';
 const options = {
   max: 500,
   maxSize: 5000,
@@ -39,6 +40,14 @@ export class AuthService {
   ) {}
 
   async registerService(userData: UserDto) {
+    if (
+      userData.email === '' ||
+      userData.name === '' ||
+      userData.password === ''
+    ) {
+      throw new Error(ErrorCode.MISSING_INPUT);
+    }
+
     const existedUser = await this.userRepository.findOne({
       where: { email: userData.email },
     });
@@ -84,7 +93,6 @@ export class AuthService {
     const existedUser = await this.userRepository.findOne({
       where: { email: userData.email },
     });
-
     if (existedUser) {
       if (!existedUser.isAuthenticated) {
         throw new Error(ErrorCode.EMAIL_NO_AUTHENTICATED);
@@ -97,6 +105,7 @@ export class AuthService {
         throw new Error(ErrorCode.INCORRECT_PASSWORD);
       }
       const token = await this.generateToken(existedUser);
+
       return token;
     }
   }
@@ -128,15 +137,20 @@ export class AuthService {
       ),
     );
   }
-  async verifyOTPService(userEmail: string, verificationCode: string) {
-    const storedOTP = cache.get(`otp:${userEmail}`);
-    if (!storedOTP || storedOTP !== verificationCode) {
+  async verifyOTPService(verifyOtpData: verifyOtpDTO) {
+    const storedOTP = cache.get(`otp:${verifyOtpData.email}`);
+    if (!storedOTP || storedOTP !== verifyOtpData.otp) {
       throw new Error(ErrorCode.OTP_INVALID);
     }
-    cache.delete(`otp:${userEmail}`);
+    cache.delete(`otp:${verifyOtpData.email}`);
+  }
+  async verifyToken(token: string) {
+    return await this.jwtService.verifyAsync(token, {
+      secret: this.configService.get<string>('JWT_SECRET'),
+    });
   }
   async generateToken(user: User): Promise<string> {
-    const payload = { userName: user.name, userId: user.id };
+    const payload = { userName: user.name, userId: user.id, roles: user.roles };
     return this.jwtService.signAsync(payload);
   }
 }

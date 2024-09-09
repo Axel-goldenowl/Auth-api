@@ -1,12 +1,18 @@
 import { Module } from '@nestjs/common';
+
 import { JwtModule } from '@nestjs/jwt';
+
+import { APP_GUARD } from '@nestjs/core';
+
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 
-import { User } from '@/modules/users/entities/user.entity';
+import { AuthGuard } from './auth.guard';
+import { RolesGuard } from './roles.guard';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { EmailModule } from '../email/email.module';
+import { User } from '@/modules/users/entities/user.entity';
 
 @Module({
   imports: [
@@ -22,7 +28,17 @@ import { EmailModule } from '../email/email.module';
     }),
     EmailModule,
   ],
-  providers: [AuthService],
+  providers: [
+    AuthService,
+    {
+      provide: APP_GUARD,
+      useClass: AuthGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: RolesGuard,
+    },
+  ],
   controllers: [AuthController],
   exports: [AuthService],
 })

@@ -5,6 +5,8 @@ import * as cookieParser from 'cookie-parser';
 
 import { AppModule } from './app.module';
 
+import { CustomExceptionFilter } from '@/common/exceptions';
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const configService = app.get(ConfigService);
@@ -18,6 +20,7 @@ async function bootstrap() {
   });
   app.use(cookieParser());
   app.setGlobalPrefix('api');
+  app.useGlobalFilters(new CustomExceptionFilter());
   await app.listen(port);
 }
 bootstrap();

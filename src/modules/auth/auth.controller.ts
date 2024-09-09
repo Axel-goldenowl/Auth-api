@@ -1,6 +1,3 @@
-import { Response } from 'express';
-
-import { ConfigService } from '@nestjs/config';
 import {
   Controller,
   Post,
@@ -9,14 +6,25 @@ import {
   Body,
   Res,
   HttpStatus,
+  ForbiddenException,
+  ConflictException,
+  NotFoundException,
 } from '@nestjs/common';
+
+import { ConfigService } from '@nestjs/config';
+
+import { Response } from 'express';
+
 import { ErrorCode } from '@/common/enums';
 
-import { AuthService } from '@/modules/auth/auth.service';
+import { handleDataResponse } from '@/utils';
 
+import { AuthService } from '@/modules/auth/auth.service';
 import { UserDto } from '@/modules/users/dto/create-user.dto';
 import { VERIFICATION_EMAIL_SUCCESS_TEMPLATE } from '@/modules/email';
-import { handleDataResponse } from '@/utils';
+
+import { verifyOtpDTO } from './dto/verity-otp.dto';
+import { Public } from './public.decorator';
 
 @Controller('auth')
 export class AuthController {
@@ -24,7 +32,7 @@ export class AuthController {
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
   ) {}
-
+  @Public()
   @Post('register')
   async register(
     @Body() userData: UserDto,
@@ -41,29 +49,18 @@ export class AuthController {
         );
     } catch (error) {
       if (error.message === ErrorCode.EMAIL_ALREADY_REGISTERED) {
-        response
-          .status(HttpStatus.CONFLICT)
-          .json(
-            handleDataResponse(
-              'Email has already registered!',
-              ErrorCode.EMAIL_ALREADY_REGISTERED,
-            ),
-          );
+        throw new ConflictException(ErrorCode.EMAIL_ALREADY_REGISTERED);
       } else {
-        response
-          .status(HttpStatus.INTERNAL_SERVER_ERROR)
-          .json(
-            handleDataResponse(
-              'Register failed! ' + error.message,
-              ErrorCode.REGISTRATION_FAILED,
-            ),
-          );
+        throw error;
       }
     }
   }
-
+  @Public()
   @Get('confirm/:id')
-  async confirm(@Res() response: Response, @Param('id') id: string) {
+  async confirm(
+    @Param('id') id: string,
+    @Res({ passthrough: true }) response: Response,
+  ) {
     try {
       await this.authService.confirmEmailService(id);
       const url = this.configService.get<string>('CLIENT_URL');
@@ -72,22 +69,13 @@ export class AuthController {
         .send(VERIFICATION_EMAIL_SUCCESS_TEMPLATE.replace('{url}', url));
     } catch (error) {
       if (error.message === ErrorCode.MISSING_INPUT) {
-        response
-          .status(HttpStatus.NOT_ACCEPTABLE)
-          .json(handleDataResponse('Missing input', ErrorCode.MISSING_INPUT));
+        throw new NotFoundException(ErrorCode.MISSING_INPUT);
       } else {
-        response
-          .status(HttpStatus.INTERNAL_SERVER_ERROR)
-          .json(
-            handleDataResponse(
-              'Invalid confirmation link! ' + error.message,
-              ErrorCode.INVALID_LINK_EMAIL_VERIFICATION,
-            ),
-          );
+        throw error;
       }
     }
   }
-
+  @Public()
   @Post('login')
   async login(
     @Body() userData: UserDto,
@@ -106,38 +94,17 @@ export class AuthController {
         .json(handleDataResponse('Login successfully!'));
     } catch (error) {
       if (error.message === ErrorCode.EMAIL_NO_AUTHENTICATED) {
-        response
-          .status(HttpStatus.CONFLICT)
-          .json(
-            handleDataResponse(
-              'Email has not been authenticated!',
-              ErrorCode.EMAIL_NO_AUTHENTICATED,
-            ),
-          );
+        throw new ConflictException(ErrorCode.EMAIL_NO_AUTHENTICATED);
       } else if (error.message === ErrorCode.INCORRECT_PASSWORD) {
-        response
-          .status(HttpStatus.UNAUTHORIZED)
-          .json(
-            handleDataResponse(
-              'Incorrect password! ',
-              ErrorCode.INCORRECT_PASSWORD,
-            ),
-          );
+        throw new ForbiddenException(ErrorCode.INCORRECT_PASSWORD);
       } else {
-        response
-          .status(HttpStatus.INTERNAL_SERVER_ERROR)
-          .json(
-            handleDataResponse(
-              'Invalid confirmation link! ' + error.message,
-              ErrorCode.INVALID_LINK_EMAIL_VERIFICATION,
-            ),
-          );
+        throw error;
       }
     }
   }
-
+  @Public()
   @Post('forgot-password')
-  async resetPassword(
+  async forgotPassword(
     @Body('email') email: string,
     @Res({ passthrough: true }) response: Response,
   ) {
@@ -150,66 +117,28 @@ export class AuthController {
         );
     } catch (error) {
       if (error.message === ErrorCode.USER_NOT_FOUND) {
-        response
-          .status(HttpStatus.CONFLICT)
-          .json(
-            handleDataResponse(
-              'Email is not registered!',
-              ErrorCode.USER_NOT_FOUND,
-            ),
-          );
-      } else if (error.message === ErrorCode.EMAIL_NO_AUTHENTICATED) {
-        response
-          .status(HttpStatus.CONFLICT)
-          .json(
-            handleDataResponse(
-              'Email has not been authenticated!',
-              ErrorCode.EMAIL_NO_AUTHENTICATED,
-            ),
-          );
+        throw new NotFoundException(ErrorCode.USER_NOT_FOUND);
       } else {
-        response
-          .status(HttpStatus.INTERNAL_SERVER_ERROR)
-          .json(
-            handleDataResponse(
-              'Failed for request forgot password ' + error.message,
-              ErrorCode.RESET_PASSWORD_FAIL,
-            ),
-          );
+        throw error;
       }
     }
   }
-
+  @Public()
   @Post('verify-otp')
   async verifyOTP(
-    @Body('email') email: string,
-    @Body('otp') otp: string,
+    @Body() otpData: verifyOtpDTO,
     @Res({ passthrough: true }) response: Response,
   ) {
     try {
-      await this.authService.verifyOTPService(email, otp);
+      await this.authService.verifyOTPService(otpData);
       response
         .status(HttpStatus.OK)
         .json(handleDataResponse('OTP is verified', 'OK'));
     } catch (error) {
       if (error.message === ErrorCode.OTP_INVALID) {
-        response
-          .status(HttpStatus.CONFLICT)
-          .json(
-            handleDataResponse(
-              'OTP is expired or invalid',
-              ErrorCode.OTP_INVALID,
-            ),
-          );
+        throw new ConflictException(ErrorCode.OTP_INVALID);
       } else {
-        response
-          .status(HttpStatus.INTERNAL_SERVER_ERROR)
-          .json(
-            handleDataResponse(
-              'Failed for request forgot password ' + error.message,
-              ErrorCode.SERVER_ERROR,
-            ),
-          );
+        throw error;
       }
     }
   }
