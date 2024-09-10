@@ -8,13 +8,21 @@ import {
   Delete,
   UseGuards,
 } from '@nestjs/common';
+
+import { ApiTags } from '@nestjs/swagger';
+
 import { UsersService } from './users.service';
-import { UserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
+
+import { CreateUserDto } from './dtos/create-user.dto';
+import { UpdateUserDto } from './dtos/update-user.dto';
+
 import { Roles } from '@/modules/auth/roles.decorator';
+
 import { RolesGuard } from '@/modules/auth/roles.guard';
 import { AuthGuard } from '@/modules/auth/auth.guard';
+
 import { Role } from '@/common/enums';
+@ApiTags('Users')
 @Controller('users')
 @UseGuards(AuthGuard, RolesGuard)
 export class UsersController {
@@ -22,7 +30,7 @@ export class UsersController {
 
   @Post()
   @Roles(Role.Admin)
-  create(@Body() createUserDto: UserDto) {
+  create(@Body() createUserDto: CreateUserDto) {
     return this.usersService.create(createUserDto);
   }
 

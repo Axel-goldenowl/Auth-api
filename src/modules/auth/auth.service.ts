@@ -1,5 +1,7 @@
 import * as bcrypt from 'bcrypt';
 
+import { LRUCache } from 'lru-cache';
+
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Injectable } from '@nestjs/common';
@@ -7,18 +9,19 @@ import { Injectable } from '@nestjs/common';
 import { Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 
+import { MailerService } from '@nestjs-modules/mailer';
+
 import { ErrorCode } from '@/common/enums';
 
-import { LRUCache } from 'lru-cache';
-import {
-  EmailService,
-  VERIFICATION_EMAIL_TEMPLATE,
-  PASSWORD_RESET_REQUEST_TEMPLATE,
-} from '@/modules/email';
-
 import { User } from '@/modules/users/entities/user.entity';
-import { UserDto } from '@/modules/users/dto/create-user.dto';
-import { verifyOtpDTO } from './dto/verity-otp.dto';
+
+import { LoginUserDto } from '@/modules/users/dtos/login-user.dto';
+import { CreateUserDto } from '@/modules/users/dtos/create-user.dto';
+import { ConfirmEmailDto } from '@/modules/users/dtos/confirm-email.dto';
+import { ForgotPasswordDto } from '@/modules/users/dtos/forgot-password.dto';
+
+import { VerifyOtpDto } from './dtos/verity-otp.dto';
+
 const options = {
   max: 500,
   maxSize: 5000,
@@ -34,12 +37,12 @@ export class AuthService {
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
-    private readonly emailService: EmailService,
+    private readonly mailerService: MailerService,
     private readonly configService: ConfigService,
     private jwtService: JwtService,
   ) {}
 
-  async registerService(userData: UserDto) {
+  async registerService(userData: CreateUserDto) {
     if (
       userData.email === '' ||
       userData.name === '' ||
@@ -65,21 +68,25 @@ export class AuthService {
 
     const saveUser = await this.userRepository.save(newUser);
 
-    const url = `${this.configService.get<string>('SERVER_API_URL')}/auth/confirm/${saveUser.id}`;
+    const url = `${this.configService.get<string>('CLIENT_URL')}/auth/confirm/${saveUser.id}`;
 
-    await this.emailService.sendMail(
-      saveUser.email,
-      'Verify your email',
-      VERIFICATION_EMAIL_TEMPLATE.replace('{url}', url),
-    );
+    await this.mailerService.sendMail({
+      to: saveUser.email,
+      from: 'Anh bao',
+      subject: 'Verify email',
+      template: 'verification_email',
+      context: {
+        url: url,
+      },
+    });
   }
 
-  async confirmEmailService(id: string) {
-    if (!id) {
+  async confirmEmailService(confirmData: ConfirmEmailDto) {
+    if (!confirmData.id) {
       throw new Error(ErrorCode.MISSING_INPUT);
     }
     const existedUser = await this.userRepository.findOne({
-      where: { id },
+      where: { id: confirmData.id },
     });
     if (existedUser) {
       existedUser.isAuthenticated = true;
@@ -89,7 +96,7 @@ export class AuthService {
     }
   }
 
-  async loginService(userData: UserDto) {
+  async loginService(userData: LoginUserDto) {
     const existedUser = await this.userRepository.findOne({
       where: { email: userData.email },
     });
@@ -110,9 +117,9 @@ export class AuthService {
     }
   }
 
-  async forgotPasswordService(userEmail: string) {
+  async forgotPasswordService(forgotPasswordData: ForgotPasswordDto) {
     const existedUser = await this.userRepository.findOne({
-      where: { email: userEmail },
+      where: { email: forgotPasswordData.email },
     });
 
     if (!existedUser) {
@@ -126,18 +133,19 @@ export class AuthService {
       100000 + Math.random() * 900000,
     ).toString();
 
-    cache.set(`otp:${userEmail}`, verificationToken);
+    cache.set(`otp:${forgotPasswordData.email}`, verificationToken);
 
-    await this.emailService.sendMail(
-      userEmail,
-      'Verify your email',
-      PASSWORD_RESET_REQUEST_TEMPLATE.replace(
-        '{verificationCode}',
+    await this.mailerService.sendMail({
+      to: forgotPasswordData.email,
+      from: 'Anh bao',
+      subject: 'Forgot password',
+      template: 'password_reset_request',
+      context: {
         verificationToken,
-      ),
-    );
+      },
+    });
   }
-  async verifyOTPService(verifyOtpData: verifyOtpDTO) {
+  async verifyOTPService(verifyOtpData: VerifyOtpDto) {
     const storedOTP = cache.get(`otp:${verifyOtpData.email}`);
     if (!storedOTP || storedOTP !== verifyOtpData.otp) {
       throw new Error(ErrorCode.OTP_INVALID);

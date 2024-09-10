@@ -1,41 +1,50 @@
 import {
   Controller,
   Post,
-  Get,
-  Param,
   Body,
   Res,
   HttpStatus,
   ForbiddenException,
   ConflictException,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
-
-import { ConfigService } from '@nestjs/config';
 
 import { Response } from 'express';
 
 import { ErrorCode } from '@/common/enums';
 
+import {
+  ApiBadRequestResponse,
+  ApiConflictResponse,
+  ApiCreatedResponse,
+  ApiNotFoundResponse,
+  ApiOkResponse,
+  ApiTags,
+} from '@nestjs/swagger';
+
 import { handleDataResponse } from '@/utils';
 
 import { AuthService } from '@/modules/auth/auth.service';
-import { UserDto } from '@/modules/users/dto/create-user.dto';
-import { VERIFICATION_EMAIL_SUCCESS_TEMPLATE } from '@/modules/email';
+import { LoginUserDto } from '@/modules/users/dtos/login-user.dto';
+import { CreateUserDto } from '@/modules/users/dtos/create-user.dto';
+import { ForgotPasswordDto } from '../users/dtos/forgot-password.dto';
+import { ConfirmEmailDto } from '@/modules/users/dtos/confirm-email.dto';
 
-import { verifyOtpDTO } from './dto/verity-otp.dto';
-import { Public } from './public.decorator';
+import { VerifyOtpDto } from './dtos/verity-otp.dto';
 
+@ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-  constructor(
-    private readonly authService: AuthService,
-    private readonly configService: ConfigService,
-  ) {}
-  @Public()
+  constructor(private readonly authService: AuthService) {}
+
   @Post('register')
+  @ApiCreatedResponse({
+    description: 'The user has been successfully registered.',
+  })
+  @ApiConflictResponse({ description: 'Email is already registered!' })
   async register(
-    @Body() userData: UserDto,
+    @Body() userData: CreateUserDto,
     @Res({ passthrough: true }) response: Response,
   ) {
     try {
@@ -55,30 +64,38 @@ export class AuthController {
       }
     }
   }
-  @Public()
-  @Get('confirm/:id')
+
+  @Post('confirm')
+  @ApiOkResponse({
+    description: 'Confirm email successfully!!.',
+  })
+  @ApiBadRequestResponse({ description: 'Missing input!' })
   async confirm(
-    @Param('id') id: string,
+    @Body() confirmData: ConfirmEmailDto,
     @Res({ passthrough: true }) response: Response,
   ) {
     try {
-      await this.authService.confirmEmailService(id);
-      const url = this.configService.get<string>('CLIENT_URL');
+      await this.authService.confirmEmailService(confirmData);
       response
         .status(HttpStatus.OK)
-        .send(VERIFICATION_EMAIL_SUCCESS_TEMPLATE.replace('{url}', url));
+        .json(handleDataResponse('Confirm email successfully!!'));
     } catch (error) {
       if (error.message === ErrorCode.MISSING_INPUT) {
-        throw new NotFoundException(ErrorCode.MISSING_INPUT);
+        throw new BadRequestException(ErrorCode.MISSING_INPUT);
       } else {
         throw error;
       }
     }
   }
-  @Public()
+
   @Post('login')
+  @ApiOkResponse({
+    description: 'Login successfully!!',
+  })
+  @ApiConflictResponse({ description: 'Email has not been confirmed!' })
+  @ApiBadRequestResponse({ description: 'Incorrect password!' })
   async login(
-    @Body() userData: UserDto,
+    @Body() userData: LoginUserDto,
     @Res({ passthrough: true }) response: Response,
   ) {
     try {
@@ -102,14 +119,16 @@ export class AuthController {
       }
     }
   }
-  @Public()
+
   @Post('forgot-password')
+  @ApiOkResponse({ description: 'Please check your email to confirm forget' })
+  @ApiNotFoundResponse({ description: 'Email is not registered!' })
   async forgotPassword(
-    @Body('email') email: string,
+    @Body() forgotPasswordData: ForgotPasswordDto,
     @Res({ passthrough: true }) response: Response,
   ) {
     try {
-      await this.authService.forgotPasswordService(email);
+      await this.authService.forgotPasswordService(forgotPasswordData);
       response
         .status(HttpStatus.OK)
         .json(
@@ -123,10 +142,12 @@ export class AuthController {
       }
     }
   }
-  @Public()
+
   @Post('verify-otp')
+  @ApiOkResponse({ description: 'OTP is verified' })
+  @ApiBadRequestResponse({ description: 'OTP is expired or invalid!' })
   async verifyOTP(
-    @Body() otpData: verifyOtpDTO,
+    @Body() otpData: VerifyOtpDto,
     @Res({ passthrough: true }) response: Response,
   ) {
     try {
@@ -136,7 +157,7 @@ export class AuthController {
         .json(handleDataResponse('OTP is verified', 'OK'));
     } catch (error) {
       if (error.message === ErrorCode.OTP_INVALID) {
-        throw new ConflictException(ErrorCode.OTP_INVALID);
+        throw new BadRequestException(ErrorCode.OTP_INVALID);
       } else {
         throw error;
       }
